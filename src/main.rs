@@ -1,4 +1,5 @@
 use field::{Field, FieldSnapshot};
+use rand::prelude::*;
 use robot::Robot;
 
 mod actions;
@@ -14,25 +15,25 @@ struct Alliance {
 }
 
 impl Alliance {
-    fn tick(&mut self, t: f32, field: &Field) -> FieldSnapshot {
+    fn tick(&mut self, t: f32, field: &Field, rng: &mut impl Rng) -> FieldSnapshot {
         FieldSnapshot::new(
             t,
             [
-                self.a.tick(t, field, (&self.b, &self.c)),
-                self.b.tick(t, field, (&self.a, &self.c)),
-                self.c.tick(t, field, (&self.a, &self.b)),
+                self.a.tick(t, rng, field, (&self.b, &self.c)),
+                self.b.tick(t, rng, field, (&self.a, &self.c)),
+                self.c.tick(t, rng, field, (&self.a, &self.b)),
             ],
         )
     }
 }
 
-fn run_match(mut alliance: Alliance) -> Field {
+fn run_match(mut alliance: Alliance, mut rng: impl Rng) -> Field {
     const MATCH_TIME: f32 = 135.0;
     (0..)
         .map(|x| x as f32 * STEP)
         .take_while(|t| *t < MATCH_TIME)
         .fold(Field::default(), |field, t| {
-            let actions = alliance.tick(t, &field);
+            let actions = alliance.tick(t, &field, &mut rng);
             field.apply(actions)
         })
 }
@@ -43,5 +44,6 @@ fn main() {
         b: Robot::a(),
         c: Robot::a(),
     };
-    run_match(alliance);
+    let rng = rand::rngs::StdRng::seed_from_u64(100);
+    run_match(alliance, rng);
 }
