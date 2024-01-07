@@ -1,4 +1,4 @@
-use field::{Field, FieldSnapshot};
+use field::{AllianceActions, Field};
 use rand::prelude::*;
 use robot::Robot;
 
@@ -15,8 +15,8 @@ struct Alliance {
 }
 
 impl Alliance {
-    fn tick(&mut self, t: f32, field: &Field, rng: &mut impl Rng) -> FieldSnapshot {
-        FieldSnapshot::new(
+    fn tick(&mut self, t: f32, field: &Field, rng: &mut impl Rng) -> AllianceActions {
+        AllianceActions::new(
             t,
             [
                 self.a.tick(t, rng, field, (&self.b, &self.c)),

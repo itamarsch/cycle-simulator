@@ -3,6 +3,7 @@ use rand::Rng;
 use crate::{
     actions::{Action, CycleAction, ScoringType},
     field::Field,
+    STEP,
 };
 
 enum ScoringStrategy {
@@ -54,7 +55,7 @@ impl Robot {
         field: &Field,
         other_robots: (&Robot, &Robot),
     ) -> Option<ScoringType> {
-        self.current_action.time_left -= t;
+        self.current_action.time_left -= STEP;
         let mut action = None;
         if self.current_action.time_left < 0.0 {
             match self.current_action.action {

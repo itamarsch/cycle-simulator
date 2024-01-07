@@ -1,12 +1,12 @@
 use crate::{actions::ScoringType, STEP};
 
-pub struct FieldSnapshot {
+pub struct AllianceActions {
     t: f32,
     actions: [Option<ScoringType>; 3],
 }
-impl FieldSnapshot {
-    pub fn new(t: f32, actions: [Option<ScoringType>; 3]) -> FieldSnapshot {
-        FieldSnapshot { t, actions }
+impl AllianceActions {
+    pub fn new(t: f32, actions: [Option<ScoringType>; 3]) -> AllianceActions {
+        AllianceActions { t, actions }
     }
 }
 
@@ -38,7 +38,7 @@ pub struct Field {
 }
 
 impl Field {
-    pub fn apply(mut self, actions: FieldSnapshot) -> Self {
+    pub fn apply(mut self, actions: AllianceActions) -> Self {
         if let Some(ref mut time_left_for_amplified) = self.time_left_for_amplified {
             *time_left_for_amplified -= STEP;
             if *time_left_for_amplified <= 0.0 {
@@ -57,12 +57,15 @@ impl Field {
                     }
                 }
                 ScoringType::Speaker => {
-                    if self.time_left_for_amplified.is_some() {
-                        self.amplified_speaker += 1;
-                    } else if let AmplifyState::Two = self.current_amplify {
+                    // Basic startegy every team will probably use:
+                    // If you can amplify the speaker,
+                    // amplify it once a robot shoots to the speaker
+                    if let AmplifyState::Two = self.current_amplify {
                         self.current_amplify = AmplifyState::Off;
                         const AMPLIFICATION_TIME: f32 = 10f32;
                         self.time_left_for_amplified = Some(AMPLIFICATION_TIME);
+                    }
+                    if self.time_left_for_amplified.is_some() {
                         self.amplified_speaker += 1;
                     } else {
                         self.speaker += 1;
