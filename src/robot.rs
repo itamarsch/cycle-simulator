@@ -1,10 +1,9 @@
-use color_print::cprintln;
 use rand::Rng;
 
 use crate::{
     actions::{Action, CycleAction, ScoringType},
-    field::Field,
-    STEP,
+    field::{Field, FieldActionMessage},
+    MATCH_TIME, STEP,
 };
 
 pub enum ScoringStrategy {
@@ -19,49 +18,31 @@ pub struct Robot {
     scoring_strategy: ScoringStrategy,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct RobotConfig {
-    intake_drive_time: f32,
+    drive_time: f32,
+    drive_time_noise_factor: f32,
     speaker_score_time: f32,
     amp_score_time: f32,
-    drive_time_noise_factor: f32,
     place_time_noise_factor: f32,
     success_percent: f32,
-}
-
-impl Default for RobotConfig {
-    fn default() -> Self {
-        const INTAKE_DRIVE_TIME: f32 = 10.0;
-        const AMP_SCORE_TIME: f32 = 4.0;
-        const SPEAKER_SCORE_TIME: f32 = 2.0;
-        const DRIVE_TIME_NOISE_FACTOR: f32 = 0.9;
-        const PLACE_TIME_NOISE_FACTOR: f32 = 0.02;
-        const SUCCESS_PERCENT: f32 = 0.9;
-
-        RobotConfig {
-            intake_drive_time: INTAKE_DRIVE_TIME,
-            speaker_score_time: SPEAKER_SCORE_TIME,
-            amp_score_time: AMP_SCORE_TIME,
-            drive_time_noise_factor: DRIVE_TIME_NOISE_FACTOR,
-            place_time_noise_factor: PLACE_TIME_NOISE_FACTOR,
-            success_percent: SUCCESS_PERCENT,
-        }
-    }
+    climbing_time: f32,
+    climbing_time_noise_factor: f32,
 }
 
 impl Robot {
     pub fn new(
         scoring_strategy: ScoringStrategy,
-        config: RobotConfig,
+        mut config: RobotConfig,
         name: &'static str,
         rng: &mut impl Rng,
     ) -> Self {
+        config.climbing_time =
+            gen_time_with_noise(config.climbing_time, config.climbing_time_noise_factor, rng);
+
         let initial_action = CycleAction::new(
             Action::Driving,
-            gen_time_with_noise(
-                config.intake_drive_time,
-                config.drive_time_noise_factor,
-                rng,
-            ),
+            gen_time_with_noise(config.drive_time, config.drive_time_noise_factor, rng),
         );
         Robot {
             name,
@@ -77,9 +58,17 @@ impl Robot {
         rng: &mut impl Rng,
         field: &Field,
         other_robots: (&Robot, &Robot),
-    ) -> Option<ScoringType> {
+    ) -> Option<FieldActionMessage> {
         self.current_action.time_left -= STEP;
         let mut action = None;
+
+        if !matches!(self.current_action.action, Action::Climbing)
+            && MATCH_TIME - field.t <= self.config.climbing_time
+        {
+            self.current_action = CycleAction::new(Action::Climbing, self.config.climbing_time);
+            return Some(FieldActionMessage::ActionStarted(Action::Climbing));
+        }
+
         if self.current_action.time_left < 0.0 {
             match self.current_action.action {
                 // Finished driving pick how to score based on startegy
@@ -100,30 +89,27 @@ impl Robot {
                 Action::Scoring(scoring_type) => {
                     match scoring_type {
                         ScoringType::Amp => {
-                            action = Some(scoring_type);
+                            action = Some(FieldActionMessage::Scored(scoring_type));
                         }
                         ScoringType::Speaker
                             if rng.gen_range(0.0..1.0) < self.config.success_percent =>
                         {
-                            action = Some(scoring_type);
+                            action = Some(FieldActionMessage::Scored(scoring_type));
                         }
+
                         _ => {
-                            cprintln!(
-                                "<red>{} Robot {} *failed* placing: {:?}</>",
-                                field.t,
-                                self.name,
-                                scoring_type,
-                            );
+                            action = Some(FieldActionMessage::Failed(scoring_type));
                         }
                     }
 
                     self.current_action.time_left += gen_time_with_noise(
-                        self.config.intake_drive_time,
+                        self.config.drive_time,
                         self.config.drive_time_noise_factor,
                         rng,
                     );
                     self.current_action.action = Action::Driving;
                 }
+                Action::Climbing => {}
             }
         }
         action

@@ -11,6 +11,7 @@ impl CycleAction {
 pub enum Action {
     Driving,
     Scoring(ScoringType),
+    Climbing,
 }
 
 #[derive(Copy, Clone, Debug)]

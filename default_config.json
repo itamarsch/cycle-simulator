@@ -1,0 +1,10 @@
+{
+  "drive_time": 10.0,
+  "speaker_score_time": 2.0,
+  "amp_score_time": 2.0,
+  "drive_time_noise_factor": 0.3,
+  "place_time_noise_factor": 0.02,
+  "success_percent": 0.9,
+  "climbing_time": 10.0,
+  "climbing_time_noise_factor": 0.5
+}
