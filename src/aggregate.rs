@@ -1,7 +1,5 @@
-use std::iter::Sum;
-
 use cycle_simulation::{
-    robot::{Robot, RobotConfig, ScoringStrategy},
+    robot::{Robot, RobotConfig},
     run_match, Alliance,
 };
 use rand::prelude::*;
@@ -14,19 +12,9 @@ fn main() {
         .map(|i| {
             let mut rng = rand::rngs::StdRng::seed_from_u64(i as u64);
             let alliance = Alliance {
-                a: Robot::new(ScoringStrategy::Amp, default.clone(), "A", &mut rng),
-                b: Robot::new(
-                    ScoringStrategy::SpeakerAndAmp,
-                    default.clone(),
-                    "SA2",
-                    &mut rng,
-                ),
-                c: Robot::new(
-                    ScoringStrategy::SpeakerAndAmp,
-                    default.clone(),
-                    "SA1",
-                    &mut rng,
-                ),
+                a: Robot::new(default.clone(), &mut rng),
+                b: Robot::new(default.clone(), &mut rng),
+                c: Robot::new(default.clone(), &mut rng),
             };
             let final_field = run_match(alliance, rng, false);
             final_field.get_score()
@@ -42,7 +30,7 @@ fn main() {
             .map(|score_summarization| score_summarization.game_pieces_played)),
         avg(matches
             .iter()
-            .map(|score_summarization| score_summarization.climb_points))
+            .map(|score_summarization| score_summarization.stage_points))
     );
 }
 

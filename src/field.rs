@@ -9,59 +9,78 @@ use crate::{
 pub struct ScoreSummarization {
     pub game_piece_points: i32,
     pub game_pieces_played: i32,
-    pub climb_points: i32,
+    pub stage_points: i32,
 }
 
 pub enum FieldActionMessage {
     Scored(ScoringType),
     Failed(ScoringType),
     ActionStarted(Action),
-    FinishedClimbing(bool),
+    FinishedClimbing(EndgameState),
 }
 
-pub struct FieldActions {
-    t: f32,
-    actions: [(&'static str, Option<FieldActionMessage>); 3],
+pub struct RobotActionMessage {
+    name: String,
+    field_action_message: FieldActionMessage,
 }
-impl FieldActions {
+
+impl RobotActionMessage {
+    pub fn new(name: String, field_action_message: FieldActionMessage) -> RobotActionMessage {
+        RobotActionMessage {
+            name,
+            field_action_message,
+        }
+    }
+}
+
+pub struct AllianceActions {
+    t: f32,
+    actions: [Option<RobotActionMessage>; 3],
+}
+impl AllianceActions {
     pub fn new(
         t: f32,
-        a: (&'static str, Option<FieldActionMessage>),
-        b: (&'static str, Option<FieldActionMessage>),
-        c: (&'static str, Option<FieldActionMessage>),
-    ) -> FieldActions {
+        a: Option<RobotActionMessage>,
+        b: Option<RobotActionMessage>,
+        c: Option<RobotActionMessage>,
+    ) -> AllianceActions {
         let actions = [a, b, c];
-        FieldActions { t, actions }
+        AllianceActions { t, actions }
     }
 }
 
 #[derive(Default, Debug)]
 pub struct Field {
     pub t: f32,
+    pub started_teleop: bool,
     pub speaker: i32,
     pub climbs: i32,
     pub amplified_speaker: i32,
+    pub auto_speaker: i32,
+    pub auto_amp: i32,
     pub amp: i32,
     pub time_left_for_amplified: Option<f32>,
     pub current_amplify: AmplifyState,
+    pub traps: i32,
 }
 
 impl Field {
     pub fn get_score(&self) -> ScoreSummarization {
-        let speaker_score = self.speaker * 2;
-        let amplified_speaker_score = self.amplified_speaker * 5;
-        let amp_score = self.amp;
+        let speaker_score = self.speaker * 2 + self.auto_speaker * 5 + self.amplified_speaker * 5;
+        let amp_score = self.amp + self.auto_amp * 2;
 
-        let game_pieces_played = self.amp + self.amplified_speaker + self.speaker;
-        let game_piece_points = amp_score + amplified_speaker_score + speaker_score;
-        let climb_points = self.climbs * 3;
+        let game_pieces_played =
+            self.amp + self.auto_amp + self.amplified_speaker + self.speaker + self.auto_speaker;
+
+        let game_piece_points = amp_score + speaker_score;
+        let stage_points = self.climbs * 3 + self.traps * 5;
         ScoreSummarization {
             game_piece_points,
             game_pieces_played,
-            climb_points,
+            stage_points,
         }
     }
-    pub fn apply(mut self, actions: FieldActions, print: bool) -> Self {
+    pub fn apply(mut self, actions: AllianceActions, print: bool) -> Self {
         self.t = actions.t;
         if let Some(ref mut time_left_for_amplified) = self.time_left_for_amplified {
             *time_left_for_amplified -= STEP;
@@ -74,14 +93,19 @@ impl Field {
             }
         }
 
-        for (action, name) in actions
-            .actions
-            .into_iter()
-            .filter_map(|(name, maybe_action)| maybe_action.map(|action| (action, name)))
-        {
-            match action {
+        if !self.started_teleop && self.t >= 15.0 {
+            self.started_teleop = true;
+            println!("Started Teleop")
+        }
+        for action in actions.actions.into_iter().flatten() {
+            let name = action.name;
+            match action.field_action_message {
                 FieldActionMessage::Scored(ScoringType::Amp) => {
-                    self.amp += 1;
+                    if self.t < 15.0 {
+                        self.auto_amp += 1;
+                    } else {
+                        self.amp += 1;
+                    }
                     if self.time_left_for_amplified.is_none() {
                         self.current_amplify = self.current_amplify.next();
                     }
@@ -99,7 +123,7 @@ impl Field {
                     // If you can amplify the speaker,
                     // amplify it once a robot shoots to the speaker
                     if let AmplifyState::Two = self.current_amplify {
-                        if self.time_left_for_amplified.is_none() {
+                        if self.time_left_for_amplified.is_none() && self.t > 15.0 {
                             if print {
                                 cprintln!("<yellow>{} *** Start amplification ***</>", self.t);
                             }
@@ -115,7 +139,9 @@ impl Field {
                             self.time_left_for_amplified.is_some()
                         );
                     }
-                    if self.time_left_for_amplified.is_some() {
+                    if self.t < 15.0 {
+                        self.auto_speaker += 1;
+                    } else if self.time_left_for_amplified.is_some() {
                         self.amplified_speaker += 1;
                     } else {
                         self.speaker += 1;
@@ -136,21 +162,29 @@ impl Field {
                         );
                     }
                 }
-                FieldActionMessage::FinishedClimbing(true) => {
+                FieldActionMessage::FinishedClimbing(EndgameState::FailedTrapping) => {
                     self.climbs += 1;
                     if print {
                         cprintln!(
-                            "<bright-cyan>{} Robot {} succeeded climbing</>",
+                            "<bright-cyan>{} Robot {} Succeeded Climbing</>",
                             self.t,
                             name
                         );
                     }
                 }
-                FieldActionMessage::FinishedClimbing(false) => {
+                FieldActionMessage::FinishedClimbing(EndgameState::FailedClimbing) => {
                     if print {
                         cprintln!("<bright-red>{} Robot {} *failed* climbing</>", self.t, name);
                     }
                 }
+                FieldActionMessage::FinishedClimbing(EndgameState::Trapped) => {
+                    self.traps += 1;
+                    self.climbs += 1;
+                    if print {
+                        cprintln!("<bright-green>{} Robot {} Added to trap</>", self.t, name);
+                    }
+                }
+
                 _ => {}
             }
         }
@@ -165,6 +199,13 @@ pub enum AmplifyState {
     One,
     Two,
 }
+
+pub enum EndgameState {
+    FailedClimbing,
+    FailedTrapping,
+    Trapped,
+}
+
 impl AmplifyState {
     fn next(&self) -> Self {
         match self {

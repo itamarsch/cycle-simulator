@@ -1,4 +1,4 @@
-use field::{Field, FieldActions};
+use field::{AllianceActions, Field};
 use rand::prelude::*;
 use robot::Robot;
 
@@ -7,7 +7,7 @@ pub mod field;
 pub mod robot;
 
 const STEP: f32 = 0.01;
-const MATCH_TIME: f32 = 135.0;
+const MATCH_TIME: f32 = 150.0;
 
 pub struct Alliance {
     pub a: Robot,
@@ -16,13 +16,11 @@ pub struct Alliance {
 }
 
 impl Alliance {
-    pub fn tick(&mut self, t: f32, field: &Field, rng: &mut impl Rng) -> FieldActions {
-        FieldActions::new(
-            t,
-            (self.a.name, self.a.tick(rng, field, (&self.b, &self.c))),
-            (self.b.name, self.b.tick(rng, field, (&self.a, &self.c))),
-            (self.c.name, self.c.tick(rng, field, (&self.a, &self.b))),
-        )
+    pub fn tick(&mut self, t: f32, field: &Field, rng: &mut impl Rng) -> AllianceActions {
+        let a_message = self.a.tick(rng, field, (&self.b, &self.c));
+        let b_message = self.b.tick(rng, field, (&self.a, &self.c));
+        let c_message = self.c.tick(rng, field, (&self.a, &self.b));
+        AllianceActions::new(t, a_message, b_message, c_message)
     }
 }
 

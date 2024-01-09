@@ -1,11 +1,16 @@
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     actions::{Action, CycleAction, ScoringType},
-    field::{Field, FieldActionMessage},
+    field::{EndgameState, Field, FieldActionMessage, RobotActionMessage},
     MATCH_TIME, STEP,
 };
 
+mod robot_config;
+pub use robot_config::RobotConfig;
+
+#[derive(Serialize, Deserialize, Clone)]
 pub enum ScoringStrategy {
     Amp,
     Speaker,
@@ -13,46 +18,29 @@ pub enum ScoringStrategy {
 }
 pub struct Robot {
     config: RobotConfig,
-    pub name: &'static str,
     pub current_action: CycleAction,
-    scoring_strategy: ScoringStrategy,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct RobotConfig {
-    drive_time: f32,
-    drive_time_noise_factor: f32,
-    speaker_score_time: f32,
-    amp_score_time: f32,
-    place_time_noise_factor: f32,
-    scoring_success_percent: f32,
-    climbing_time: f32,
-    climbing_time_noise_factor: f32,
-    climb_success_percent: f32,
 }
 
 impl Robot {
-    pub fn new(
-        scoring_strategy: ScoringStrategy,
-        mut config: RobotConfig,
-        name: &'static str,
-        rng: &mut impl Rng,
-    ) -> Self {
+    pub fn new(mut config: RobotConfig, rng: &mut impl Rng) -> Self {
         config.climbing_time =
             gen_time_with_noise(config.climbing_time, config.climbing_time_noise_factor, rng);
-        println!("{}, {}", name, config.climbing_time);
 
         let initial_action = CycleAction::new(
             Action::Driving,
-            gen_time_with_noise(config.drive_time, config.drive_time_noise_factor, rng),
+            gen_time_with_noise(
+                config.placing_config(0.0).drive_time,
+                config.placing_config(0.0).drive_time_noise_factor,
+                rng,
+            ),
         );
         Robot {
-            name,
             config,
-
             current_action: initial_action,
-            scoring_strategy,
         }
+    }
+    pub fn name(&self) -> &str {
+        &self.config.name
     }
 
     pub fn tick(
@@ -60,7 +48,7 @@ impl Robot {
         rng: &mut impl Rng,
         field: &Field,
         other_robots: (&Robot, &Robot),
-    ) -> Option<FieldActionMessage> {
+    ) -> Option<RobotActionMessage> {
         self.current_action.time_left -= STEP;
         let mut action = None;
 
@@ -68,7 +56,9 @@ impl Robot {
             && MATCH_TIME - field.t - STEP * 2.0 <= self.config.climbing_time
         {
             self.current_action = CycleAction::new(Action::Climbing, self.config.climbing_time);
-            return Some(FieldActionMessage::ActionStarted(Action::Climbing));
+            return Some(
+                self.build_robot_message(FieldActionMessage::ActionStarted(Action::Climbing)),
+            );
         }
 
         if self.current_action.time_left < 0.0 {
@@ -77,12 +67,14 @@ impl Robot {
                 Action::Driving => {
                     let next_scoring_type = self.get_next_scoring_type(field, other_robots);
                     let time_addition = match next_scoring_type {
-                        ScoringType::Amp => self.config.amp_score_time,
-                        ScoringType::Speaker => self.config.speaker_score_time,
+                        ScoringType::Amp => self.config.placing_config(field.t).amp_score_time,
+                        ScoringType::Speaker => {
+                            self.config.placing_config(field.t).speaker_score_time
+                        }
                     };
                     self.current_action.time_left += gen_time_with_noise(
                         time_addition,
-                        self.config.place_time_noise_factor,
+                        self.config.placing_config(field.t).place_time_noise_factor,
                         rng,
                     );
                     self.current_action.action = Action::Scoring(next_scoring_type);
@@ -94,7 +86,8 @@ impl Robot {
                             action = Some(FieldActionMessage::Scored(scoring_type));
                         }
                         ScoringType::Speaker
-                            if rng.gen_range(0.0..1.0) < self.config.scoring_success_percent =>
+                            if rng.gen_range(0.0..1.0)
+                                < self.config.placing_config(field.t).scoring_success_percent =>
                         {
                             action = Some(FieldActionMessage::Scored(scoring_type));
                         }
@@ -105,26 +98,38 @@ impl Robot {
                     }
 
                     self.current_action.time_left += gen_time_with_noise(
-                        self.config.drive_time,
-                        self.config.drive_time_noise_factor,
+                        self.config.placing_config(field.t).drive_time,
+                        self.config.placing_config(field.t).drive_time_noise_factor,
                         rng,
                     );
                     self.current_action.action = Action::Driving;
                 }
                 Action::Climbing => {
                     action = Some(FieldActionMessage::FinishedClimbing(
-                        rng.gen_range(0.0..1.0) < self.config.climb_success_percent,
+                        if rng.gen_range(0.0..1.0) < self.config.climb_success_percent {
+                            if rng.gen_range(0.0..1.0) < self.config.trap_success_percent {
+                                EndgameState::Trapped
+                            } else {
+                                EndgameState::FailedTrapping
+                            }
+                        } else {
+                            EndgameState::FailedClimbing
+                        },
                     ));
                     self.current_action.time_left = f32::INFINITY;
                 }
             }
         }
-        action
+        action.map(|message| self.build_robot_message(message))
+    }
+
+    fn build_robot_message(&self, message: FieldActionMessage) -> RobotActionMessage {
+        RobotActionMessage::new(self.name().to_owned(), message)
     }
 
     // Runs after robot finished intake and is at the wing, selects how to place based on field state
     fn get_next_scoring_type(&self, field: &Field, robots: (&Robot, &Robot)) -> ScoringType {
-        match self.scoring_strategy {
+        match self.config.placing_config(field.t).scoring_strategy {
             ScoringStrategy::Amp => ScoringType::Amp,
             ScoringStrategy::Speaker => ScoringType::Speaker,
             ScoringStrategy::SpeakerAndAmp => {

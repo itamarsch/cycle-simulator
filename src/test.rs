@@ -1,27 +1,21 @@
 use cycle_simulation::{
-    robot::{Robot, RobotConfig, ScoringStrategy},
+    robot::{Robot, RobotConfig},
     run_match, Alliance,
 };
 use rand::SeedableRng;
 
 fn main() {
-    let default: RobotConfig =
-        serde_json::from_str(include_str!("../default_config.json")).expect("File is valid json");
-    let mut rng = rand::rngs::StdRng::seed_from_u64(1690);
+    let a: RobotConfig =
+        serde_json::from_str(include_str!("../a.json")).expect("File is valid json");
+    let b: RobotConfig =
+        serde_json::from_str(include_str!("../b.json")).expect("File is valid json");
+    let c: RobotConfig =
+        serde_json::from_str(include_str!("../c.json")).expect("File is valid json");
+    let mut rng = rand::rngs::StdRng::seed_from_u64(1693);
     let alliance = Alliance {
-        a: Robot::new(ScoringStrategy::Amp, default.clone(), "A", &mut rng),
-        b: Robot::new(
-            ScoringStrategy::SpeakerAndAmp,
-            default.clone(),
-            "SA2",
-            &mut rng,
-        ),
-        c: Robot::new(
-            ScoringStrategy::SpeakerAndAmp,
-            default.clone(),
-            "SA1",
-            &mut rng,
-        ),
+        a: Robot::new(a.clone(), &mut rng),
+        b: Robot::new(b.clone(), &mut rng),
+        c: Robot::new(c.clone(), &mut rng),
     };
     let final_field = run_match(alliance, rng, true);
     let score_summarzation = final_field.get_score();
