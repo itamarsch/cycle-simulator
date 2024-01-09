@@ -10,3 +10,11 @@ color-print = "0.3.5"
 rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.111"
+
+[[bin]]
+name = "test"
+path = "src/test.rs"
+
+[[bin]]
+name = "aggregate"
+path = "src/aggregate.rs"

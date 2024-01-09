@@ -5,10 +5,18 @@ use crate::{
     STEP,
 };
 
+#[derive(Debug)]
+pub struct ScoreSummarization {
+    pub game_piece_points: i32,
+    pub game_pieces_played: i32,
+    pub climb_points: i32,
+}
+
 pub enum FieldActionMessage {
     Scored(ScoringType),
-    ActionStarted(Action),
     Failed(ScoringType),
+    ActionStarted(Action),
+    FinishedClimbing(bool),
 }
 
 pub struct FieldActions {
@@ -31,6 +39,7 @@ impl FieldActions {
 pub struct Field {
     pub t: f32,
     pub speaker: i32,
+    pub climbs: i32,
     pub amplified_speaker: i32,
     pub amp: i32,
     pub time_left_for_amplified: Option<f32>,
@@ -38,15 +47,19 @@ pub struct Field {
 }
 
 impl Field {
-    pub fn get_score(&self) -> (i32, i32) {
+    pub fn get_score(&self) -> ScoreSummarization {
         let speaker_score = self.speaker * 2;
         let amplified_speaker_score = self.amplified_speaker * 5;
         let amp_score = self.amp;
 
         let game_pieces_played = self.amp + self.amplified_speaker + self.speaker;
-        let score = amp_score + amplified_speaker_score + speaker_score;
-
-        (score, game_pieces_played)
+        let game_piece_points = amp_score + amplified_speaker_score + speaker_score;
+        let climb_points = self.climbs * 3;
+        ScoreSummarization {
+            game_piece_points,
+            game_pieces_played,
+            climb_points,
+        }
     }
     pub fn apply(mut self, actions: FieldActions, print: bool) -> Self {
         self.t = actions.t;
@@ -121,6 +134,21 @@ impl Field {
                             name,
                             scoring_type,
                         );
+                    }
+                }
+                FieldActionMessage::FinishedClimbing(true) => {
+                    self.climbs += 1;
+                    if print {
+                        cprintln!(
+                            "<bright-cyan>{} Robot {} succeeded climbing</>",
+                            self.t,
+                            name
+                        );
+                    }
+                }
+                FieldActionMessage::FinishedClimbing(false) => {
+                    if print {
+                        cprintln!("<bright-red>{} Robot {} *failed* climbing</>", self.t, name);
                     }
                 }
                 _ => {}

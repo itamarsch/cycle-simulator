@@ -25,9 +25,10 @@ pub struct RobotConfig {
     speaker_score_time: f32,
     amp_score_time: f32,
     place_time_noise_factor: f32,
-    success_percent: f32,
+    scoring_success_percent: f32,
     climbing_time: f32,
     climbing_time_noise_factor: f32,
+    climb_success_percent: f32,
 }
 
 impl Robot {
@@ -39,6 +40,7 @@ impl Robot {
     ) -> Self {
         config.climbing_time =
             gen_time_with_noise(config.climbing_time, config.climbing_time_noise_factor, rng);
+        println!("{}, {}", name, config.climbing_time);
 
         let initial_action = CycleAction::new(
             Action::Driving,
@@ -63,7 +65,7 @@ impl Robot {
         let mut action = None;
 
         if !matches!(self.current_action.action, Action::Climbing)
-            && MATCH_TIME - field.t <= self.config.climbing_time
+            && MATCH_TIME - field.t - STEP * 2.0 <= self.config.climbing_time
         {
             self.current_action = CycleAction::new(Action::Climbing, self.config.climbing_time);
             return Some(FieldActionMessage::ActionStarted(Action::Climbing));
@@ -92,7 +94,7 @@ impl Robot {
                             action = Some(FieldActionMessage::Scored(scoring_type));
                         }
                         ScoringType::Speaker
-                            if rng.gen_range(0.0..1.0) < self.config.success_percent =>
+                            if rng.gen_range(0.0..1.0) < self.config.scoring_success_percent =>
                         {
                             action = Some(FieldActionMessage::Scored(scoring_type));
                         }
@@ -109,7 +111,12 @@ impl Robot {
                     );
                     self.current_action.action = Action::Driving;
                 }
-                Action::Climbing => {}
+                Action::Climbing => {
+                    action = Some(FieldActionMessage::FinishedClimbing(
+                        rng.gen_range(0.0..1.0) < self.config.climb_success_percent,
+                    ));
+                    self.current_action.time_left = f32::INFINITY;
+                }
             }
         }
         action
