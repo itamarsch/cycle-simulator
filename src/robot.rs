@@ -2,7 +2,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    actions::{Action, CycleAction, ScoringType},
+    actions::{Action, NoteScoringType, TimedAction},
     field::{EndgameState, Field, FieldActionMessage, RobotActionMessage},
     MATCH_TIME, STEP,
 };
@@ -18,7 +18,7 @@ pub enum ScoringStrategy {
 }
 pub struct Robot {
     config: RobotConfig,
-    pub current_action: CycleAction,
+    pub current_action: TimedAction,
 }
 
 impl Robot {
@@ -26,7 +26,7 @@ impl Robot {
         config.climbing_time =
             gen_time_with_noise(config.climbing_time, config.climbing_time_noise_factor, rng);
 
-        let initial_action = CycleAction::new(
+        let initial_action = TimedAction::new(
             Action::Driving,
             gen_time_with_noise(
                 config.placing_config(0.0).drive_time,
@@ -55,54 +55,62 @@ impl Robot {
         if !matches!(self.current_action.action, Action::Climbing)
             && MATCH_TIME - field.t - STEP * 2.0 <= self.config.climbing_time
         {
-            self.current_action = CycleAction::new(Action::Climbing, self.config.climbing_time);
+            self.current_action = TimedAction::new(Action::Climbing, self.config.climbing_time);
             return Some(
                 self.build_robot_message(FieldActionMessage::ActionStarted(Action::Climbing)),
             );
         }
 
         if self.current_action.time_left < 0.0 {
-            match self.current_action.action {
+            // Once action is finished send next action to robot
+            self.current_action = match self.current_action.action {
                 // Finished driving pick how to score based on startegy
                 Action::Driving => {
                     let next_scoring_type = self.get_next_scoring_type(field, other_robots);
                     let time_addition = match next_scoring_type {
-                        ScoringType::Amp => self.config.placing_config(field.t).amp_score_time,
-                        ScoringType::Speaker => {
+                        NoteScoringType::Amp => self.config.placing_config(field.t).amp_score_time,
+                        NoteScoringType::Speaker => {
                             self.config.placing_config(field.t).speaker_score_time
                         }
                     };
-                    self.current_action.time_left += gen_time_with_noise(
-                        time_addition,
-                        self.config.placing_config(field.t).place_time_noise_factor,
-                        rng,
-                    );
-                    self.current_action.action = Action::Scoring(next_scoring_type);
+
+                    TimedAction {
+                        time_left: self.current_action.time_left
+                            + gen_time_with_noise(
+                                time_addition,
+                                self.config.placing_config(field.t).place_time_noise_factor,
+                                rng,
+                            ),
+                        action: Action::NoteScoring(next_scoring_type),
+                    }
                 }
                 // Finished scoring start driving
-                Action::Scoring(scoring_type) => {
+                Action::NoteScoring(scoring_type) => {
                     match scoring_type {
-                        ScoringType::Amp => {
-                            action = Some(FieldActionMessage::Scored(scoring_type));
+                        NoteScoringType::Amp => {
+                            action = Some(FieldActionMessage::NoteScored(scoring_type));
                         }
-                        ScoringType::Speaker
+                        NoteScoringType::Speaker
                             if rng.gen_range(0.0..1.0)
                                 < self.config.placing_config(field.t).scoring_success_percent =>
                         {
-                            action = Some(FieldActionMessage::Scored(scoring_type));
+                            action = Some(FieldActionMessage::NoteScored(scoring_type));
                         }
 
-                        _ => {
-                            action = Some(FieldActionMessage::Failed(scoring_type));
+                        NoteScoringType::Speaker => {
+                            action = Some(FieldActionMessage::NoteFailed(scoring_type));
                         }
                     }
 
-                    self.current_action.time_left += gen_time_with_noise(
-                        self.config.placing_config(field.t).drive_time,
-                        self.config.placing_config(field.t).drive_time_noise_factor,
-                        rng,
-                    );
-                    self.current_action.action = Action::Driving;
+                    TimedAction {
+                        time_left: self.current_action.time_left
+                            + gen_time_with_noise(
+                                self.config.placing_config(field.t).drive_time,
+                                self.config.placing_config(field.t).drive_time_noise_factor,
+                                rng,
+                            ),
+                        action: Action::Driving,
+                    }
                 }
                 Action::Climbing => {
                     action = Some(FieldActionMessage::FinishedClimbing(
@@ -116,7 +124,11 @@ impl Robot {
                             EndgameState::FailedClimbing
                         },
                     ));
-                    self.current_action.time_left = f32::INFINITY;
+
+                    TimedAction {
+                        action: self.current_action.action,
+                        time_left: f32::INFINITY,
+                    }
                 }
             }
         }
@@ -128,10 +140,10 @@ impl Robot {
     }
 
     // Runs after robot finished intake and is at the wing, selects how to place based on field state
-    fn get_next_scoring_type(&self, field: &Field, robots: (&Robot, &Robot)) -> ScoringType {
+    fn get_next_scoring_type(&self, field: &Field, robots: (&Robot, &Robot)) -> NoteScoringType {
         match self.config.placing_config(field.t).scoring_strategy {
-            ScoringStrategy::Amp => ScoringType::Amp,
-            ScoringStrategy::Speaker => ScoringType::Speaker,
+            ScoringStrategy::Amp => NoteScoringType::Amp,
+            ScoringStrategy::Speaker => NoteScoringType::Speaker,
             ScoringStrategy::SpeakerAndAmp => {
                 let amount_of_robots_playing_amp =
                     amount_of_amps_for_action(&robots.0.current_action.action)
@@ -139,9 +151,9 @@ impl Robot {
                 let current_amount_for_amplify = field.current_amplify.as_int();
 
                 if current_amount_for_amplify + amount_of_robots_playing_amp < 2 {
-                    ScoringType::Amp
+                    NoteScoringType::Amp
                 } else {
-                    ScoringType::Speaker
+                    NoteScoringType::Speaker
                 }
             }
         }
@@ -150,7 +162,7 @@ impl Robot {
 
 fn amount_of_amps_for_action(action: &Action) -> u32 {
     match action {
-        Action::Scoring(ScoringType::Amp) => 1,
+        Action::NoteScoring(NoteScoringType::Amp) => 1,
         _ => 0,
     }
 }

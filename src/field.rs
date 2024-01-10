@@ -1,7 +1,7 @@
 use color_print::cprintln;
 
 use crate::{
-    actions::{Action, ScoringType},
+    actions::{Action, NoteScoringType},
     STEP,
 };
 
@@ -13,8 +13,8 @@ pub struct ScoreSummarization {
 }
 
 pub enum FieldActionMessage {
-    Scored(ScoringType),
-    Failed(ScoringType),
+    NoteScored(NoteScoringType),
+    NoteFailed(NoteScoringType),
     ActionStarted(Action),
     FinishedClimbing(EndgameState),
 }
@@ -100,7 +100,7 @@ impl Field {
         for action in actions.actions.into_iter().flatten() {
             let name = action.name;
             match action.field_action_message {
-                FieldActionMessage::Scored(ScoringType::Amp) => {
+                FieldActionMessage::NoteScored(NoteScoringType::Amp) => {
                     if self.t < 15.0 {
                         self.auto_amp += 1;
                     } else {
@@ -118,7 +118,7 @@ impl Field {
                         );
                     }
                 }
-                FieldActionMessage::Scored(ScoringType::Speaker) => {
+                FieldActionMessage::NoteScored(NoteScoringType::Speaker) => {
                     // Basic startegy every team will probably use:
                     // If you can amplify the speaker,
                     // amplify it once a robot shoots to the speaker
@@ -152,7 +152,7 @@ impl Field {
                         cprintln!("<magenta>{} Robot {} Started climbing</>", self.t, name);
                     }
                 }
-                FieldActionMessage::Failed(scoring_type) => {
+                FieldActionMessage::NoteFailed(scoring_type) => {
                     if print {
                         cprintln!(
                             "<red>{} Robot {} *failed* placing: {:?}</>",

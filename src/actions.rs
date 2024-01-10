@@ -1,21 +1,22 @@
-pub struct CycleAction {
+pub struct TimedAction {
     pub time_left: f32,
     pub action: Action,
 }
-impl CycleAction {
-    pub fn new(action: Action, time_left: f32) -> CycleAction {
-        CycleAction { time_left, action }
+impl TimedAction {
+    pub fn new(action: Action, time_left: f32) -> TimedAction {
+        TimedAction { time_left, action }
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum Action {
     Driving,
-    Scoring(ScoringType),
+    NoteScoring(NoteScoringType),
     Climbing,
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum ScoringType {
+pub enum NoteScoringType {
     Amp,
     Speaker,
 }

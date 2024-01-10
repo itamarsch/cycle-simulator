@@ -6,7 +6,7 @@
     "drive_time_noise_factor": 0.3,
     "place_time_noise_factor": 0.02,
     "scoring_success_percent": 0.9,
-    "scoring_strategy": "Amp"
+    "scoring_strategy": "SpeakerAndAmp"
   },
   "auto_config": {
     "drive_time": 10.0,
@@ -15,11 +15,11 @@
     "drive_time_noise_factor": 0.3,
     "place_time_noise_factor": 0.02,
     "scoring_success_percent": 0.9,
-    "scoring_strategy": "Amp"
+    "scoring_strategy": "Speaker"
   },
   "climbing_time": 10.0,
   "climbing_time_noise_factor": 0.5,
   "climb_success_percent": 0.8,
   "trap_success_percent": 0.5,
-  "name": "A"
+  "name": "SA"
 }

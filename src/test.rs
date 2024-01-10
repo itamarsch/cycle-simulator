@@ -11,7 +11,7 @@ fn main() {
         serde_json::from_str(include_str!("../b.json")).expect("File is valid json");
     let c: RobotConfig =
         serde_json::from_str(include_str!("../c.json")).expect("File is valid json");
-    let mut rng = rand::rngs::StdRng::seed_from_u64(1693);
+    let mut rng = rand::rngs::StdRng::seed_from_u64(1699);
     let alliance = Alliance {
         a: Robot::new(a.clone(), &mut rng),
         b: Robot::new(b.clone(), &mut rng),
