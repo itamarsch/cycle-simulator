@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     actions::{Action, NoteScoringType, TimedAction},
-    field::{EndgameState, Field, FieldActionMessage, RobotActionMessage},
+    field::{EndgameState, Field, MessageToField, RobotMessage},
     MATCH_TIME, STEP,
 };
 
@@ -39,97 +39,13 @@ impl Robot {
             current_action: initial_action,
         }
     }
-    pub fn name(&self) -> &str {
-        &self.config.name
-    }
-
-    pub fn next_action(
-        &self,
-        field: &Field,
-        other_robots: (&Robot, &Robot),
-        rng: &mut impl Rng,
-    ) -> (TimedAction, Option<FieldActionMessage>) {
-        match self.current_action.action {
-            // Finished driving pick how to score based on startegy
-            Action::Driving => {
-                let next_scoring_type = self.get_next_scoring_type(field, other_robots);
-                let time_addition = match next_scoring_type {
-                    NoteScoringType::Amp => self.config.placing_config(field.t).amp_score_time,
-                    NoteScoringType::Speaker => {
-                        self.config.placing_config(field.t).speaker_score_time
-                    }
-                };
-
-                (
-                    TimedAction {
-                        time_left: self.current_action.time_left
-                            + gen_time_with_noise(
-                                time_addition,
-                                self.config.placing_config(field.t).place_time_noise_factor,
-                                rng,
-                            ),
-                        action: Action::NoteScoring(next_scoring_type),
-                    },
-                    None,
-                )
-            }
-            // Finished scoring start driving
-            Action::NoteScoring(scoring_type) => {
-                let message_to_field = match scoring_type {
-                    NoteScoringType::Amp => Some(FieldActionMessage::NoteScored(scoring_type)),
-                    NoteScoringType::Speaker
-                        if rng.gen_range(0.0..1.0)
-                            < self.config.placing_config(field.t).scoring_success_percent =>
-                    {
-                        Some(FieldActionMessage::NoteScored(scoring_type))
-                    }
-
-                    NoteScoringType::Speaker => Some(FieldActionMessage::NoteFailed(scoring_type)),
-                };
-
-                (
-                    TimedAction {
-                        time_left: self.current_action.time_left
-                            + gen_time_with_noise(
-                                self.config.placing_config(field.t).drive_time,
-                                self.config.placing_config(field.t).drive_time_noise_factor,
-                                rng,
-                            ),
-                        action: Action::Driving,
-                    },
-                    message_to_field,
-                )
-            }
-            Action::Climbing => {
-                let message_to_field = Some(FieldActionMessage::FinishedClimbing(
-                    if rng.gen_range(0.0..1.0) < self.config.climb_success_percent {
-                        if rng.gen_range(0.0..1.0) < self.config.trap_success_percent {
-                            EndgameState::Trapped
-                        } else {
-                            EndgameState::FailedTrapping
-                        }
-                    } else {
-                        EndgameState::FailedClimbing
-                    },
-                ));
-
-                (
-                    TimedAction {
-                        action: self.current_action.action,
-                        time_left: f32::INFINITY,
-                    },
-                    message_to_field,
-                )
-            }
-        }
-    }
 
     pub fn tick(
         &mut self,
         rng: &mut impl Rng,
         field: &Field,
         other_robots: (&Robot, &Robot),
-    ) -> Option<RobotActionMessage> {
+    ) -> Option<RobotMessage> {
         self.current_action.time_left -= STEP;
         let mut message_to_field = None;
 
@@ -138,7 +54,7 @@ impl Robot {
             && MATCH_TIME - field.t - STEP * 2.0 <= self.config.climbing_time
         {
             self.current_action = TimedAction::new(Action::Climbing, self.config.climbing_time);
-            message_to_field = Some(FieldActionMessage::ActionStarted(Action::Climbing));
+            message_to_field = Some(MessageToField::ActionStarted(Action::Climbing));
         }
 
         if self.current_action.time_left < 0.0 {
@@ -148,8 +64,107 @@ impl Robot {
         message_to_field.map(|message| self.build_robot_message(message))
     }
 
-    fn build_robot_message(&self, message: FieldActionMessage) -> RobotActionMessage {
-        RobotActionMessage::new(self.name().to_owned(), message)
+    fn build_robot_message(&self, message: MessageToField) -> RobotMessage {
+        RobotMessage::new(self.config.name.to_owned(), message)
+    }
+
+    pub fn next_action(
+        &self,
+        field: &Field,
+        other_robots: (&Robot, &Robot),
+        rng: &mut impl Rng,
+    ) -> (TimedAction, Option<MessageToField>) {
+        match self.current_action.action {
+            // Finished driving pick how to score based on startegy
+            Action::Driving => self.on_driving_finished(field, other_robots, rng),
+            // Finished scoring start driving
+            Action::NoteScoring(scoring_type) => {
+                self.on_scoring_finished(scoring_type, field, other_robots, rng)
+            }
+            Action::Climbing => self.on_climbing_finished(field, other_robots, rng),
+        }
+    }
+
+    pub fn on_driving_finished(
+        &self,
+        field: &Field,
+        other_robots: (&Robot, &Robot),
+        rng: &mut impl Rng,
+    ) -> (TimedAction, Option<MessageToField>) {
+        let message_to_field = None;
+
+        let next_scoring_type = self.get_next_scoring_type(field, other_robots);
+        let time_addition = match next_scoring_type {
+            NoteScoringType::Amp => self.config.placing_config(field.t).amp_score_time,
+            NoteScoringType::Speaker => self.config.placing_config(field.t).speaker_score_time,
+        };
+
+        let next_action = TimedAction {
+            time_left: self.current_action.time_left
+                + gen_time_with_noise(
+                    time_addition,
+                    self.config.placing_config(field.t).place_time_noise_factor,
+                    rng,
+                ),
+            action: Action::NoteScoring(next_scoring_type),
+        };
+        (next_action, message_to_field)
+    }
+
+    pub fn on_scoring_finished(
+        &self,
+        scoring_type: NoteScoringType,
+        field: &Field,
+        _other_robots: (&Robot, &Robot),
+        rng: &mut impl Rng,
+    ) -> (TimedAction, Option<MessageToField>) {
+        let message_to_field = match scoring_type {
+            NoteScoringType::Amp => Some(MessageToField::NoteScored(scoring_type)),
+            NoteScoringType::Speaker
+                if rng.gen_range(0.0..1.0)
+                    < self.config.placing_config(field.t).scoring_success_percent =>
+            {
+                Some(MessageToField::NoteScored(scoring_type))
+            }
+
+            NoteScoringType::Speaker => Some(MessageToField::NoteFailed(scoring_type)),
+        };
+
+        let next_action = TimedAction {
+            time_left: self.current_action.time_left
+                + gen_time_with_noise(
+                    self.config.placing_config(field.t).drive_time,
+                    self.config.placing_config(field.t).drive_time_noise_factor,
+                    rng,
+                ),
+            action: Action::Driving,
+        };
+        (next_action, message_to_field)
+    }
+
+    pub fn on_climbing_finished(
+        &self,
+        _field: &Field,
+        _other_robots: (&Robot, &Robot),
+        rng: &mut impl Rng,
+    ) -> (TimedAction, Option<MessageToField>) {
+        let message_to_field = Some(MessageToField::FinishedClimbing(
+            if rng.gen_range(0.0..1.0) < self.config.climb_success_percent {
+                if rng.gen_range(0.0..1.0) < self.config.trap_success_percent {
+                    EndgameState::Trapped
+                } else {
+                    EndgameState::FailedTrapping
+                }
+            } else {
+                EndgameState::FailedClimbing
+            },
+        ));
+
+        let next_action = TimedAction {
+            time_left: f32::INFINITY,
+            action: self.current_action.action,
+        };
+        (next_action, message_to_field)
     }
 
     // Runs after robot finished intake and is at the wing, selects how to place based on field state
