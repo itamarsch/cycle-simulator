@@ -17,7 +17,7 @@ fn main() {
         b: Robot::new(b.clone(), &mut rng),
         c: Robot::new(c.clone(), &mut rng),
     };
-    let final_field = run_match(alliance, rng, true);
+    let final_field = run_match(alliance, rng);
     let score_summarzation = final_field.get_score();
     println!("{:?}", score_summarzation);
 }

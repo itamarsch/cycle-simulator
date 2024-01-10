@@ -8,6 +8,16 @@ pub mod robot;
 
 const STEP: f32 = 0.01;
 const MATCH_TIME: f32 = 150.0;
+pub const PRINT: bool = false;
+
+#[macro_export]
+macro_rules! cprintln_if_print {
+    ($x:expr, $($y:expr),*) => {
+        if $crate::PRINT {
+            color_print::cprintln!($x, $($y),*);
+        }
+    };
+}
 
 pub struct Alliance {
     pub a: Robot,
@@ -24,12 +34,12 @@ impl Alliance {
     }
 }
 
-pub fn run_match(mut alliance: Alliance, mut rng: impl Rng, print: bool) -> Field {
+pub fn run_match(mut alliance: Alliance, mut rng: impl Rng) -> Field {
     (0..)
         .map(|x| x as f32 * STEP)
         .take_while(|t| *t <= MATCH_TIME)
         .fold(Field::default(), |field, t| {
             let actions = alliance.tick(t, &field, &mut rng);
-            field.apply(actions, print)
+            field.apply(actions)
         })
 }

@@ -9,7 +9,7 @@
     "scoring_strategy": "SpeakerAndAmp"
   },
   "auto_config": {
-    "drive_time": 10.0,
+    "drive_time": 3.0,
     "speaker_score_time": 2.0,
     "amp_score_time": 2.0,
     "drive_time_noise_factor": 0.3,

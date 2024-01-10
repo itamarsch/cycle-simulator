@@ -3,20 +3,27 @@ use cycle_simulation::{
     run_match, Alliance,
 };
 use rand::prelude::*;
+use rayon::prelude::*;
 
 fn main() {
-    let default: RobotConfig =
-        serde_json::from_str(include_str!("../default_config.json")).expect("File is valid json");
+    let a: RobotConfig =
+        serde_json::from_str(include_str!("../a.json")).expect("File is valid json");
 
-    let matches = (10_000u32..10_001u32)
+    let b: RobotConfig =
+        serde_json::from_str(include_str!("../b.json")).expect("File is valid json");
+    let c: RobotConfig =
+        serde_json::from_str(include_str!("../c.json")).expect("File is valid json");
+
+    let matches = (10_000u32..20_001u32)
+        .into_par_iter()
         .map(|i| {
             let mut rng = rand::rngs::StdRng::seed_from_u64(i as u64);
             let alliance = Alliance {
-                a: Robot::new(default.clone(), &mut rng),
-                b: Robot::new(default.clone(), &mut rng),
-                c: Robot::new(default.clone(), &mut rng),
+                a: Robot::new(a.clone(), &mut rng),
+                b: Robot::new(b.clone(), &mut rng),
+                c: Robot::new(c.clone(), &mut rng),
             };
-            let final_field = run_match(alliance, rng, false);
+            let final_field = run_match(alliance, rng);
             final_field.get_score()
         })
         .collect::<Vec<_>>();

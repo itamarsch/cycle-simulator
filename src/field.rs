@@ -1,8 +1,6 @@
-use color_print::cprintln;
-
 use crate::{
     actions::{Action, NoteScoringType},
-    STEP,
+    cprintln_if_print, STEP,
 };
 
 #[derive(Debug)]
@@ -81,7 +79,7 @@ impl Field {
         }
     }
 
-    pub fn apply_action(&mut self, message: RobotMessage, print: bool) {
+    pub fn apply_action(&mut self, message: RobotMessage) {
         let robot_name = message.robot_name;
         match message.field_action_message {
             MessageToField::NoteScored(NoteScoringType::Amp) => {
@@ -93,14 +91,12 @@ impl Field {
                 if self.time_left_for_amplified.is_none() {
                     self.current_amplify = self.current_amplify.next();
                 }
-                if print {
-                    cprintln!(
-                        "<green>{} Robot {} added to amplifier, Amplify state: {:?}</>",
-                        self.t,
-                        robot_name,
-                        self.current_amplify
-                    );
-                }
+                cprintln_if_print!(
+                    "<green>{} Robot {} added to amplifier, Amplify state: {:?}</>",
+                    self.t,
+                    robot_name,
+                    self.current_amplify
+                );
             }
             MessageToField::NoteScored(NoteScoringType::Speaker) => {
                 // Basic startegy every team will probably use:
@@ -108,21 +104,17 @@ impl Field {
                 // amplify it once a robot shoots to the speaker
                 if let AmplifyState::Two = self.current_amplify {
                     if self.time_left_for_amplified.is_none() && self.t > 15.0 {
-                        if print {
-                            cprintln!("<yellow>{} *** Start amplification ***</>", self.t);
-                        }
+                        cprintln_if_print!("<yellow>{} *** Start amplification ***</>", self.t);
                         const AMPLIFICATION_TIME: f32 = 10f32;
                         self.time_left_for_amplified = Some(AMPLIFICATION_TIME);
                     }
                 }
-                if print {
-                    cprintln!(
-                        "<blue>{} Robot {} shot to speaker, Amplified: {}</>",
-                        self.t,
-                        robot_name,
-                        self.time_left_for_amplified.is_some()
-                    );
-                }
+                cprintln_if_print!(
+                    "<blue>{} Robot {} shot to speaker, Amplified: {}</>",
+                    self.t,
+                    robot_name,
+                    self.time_left_for_amplified.is_some()
+                );
                 if self.t < 15.0 {
                     self.auto_speaker += 1;
                 } else if self.time_left_for_amplified.is_some() {
@@ -133,65 +125,53 @@ impl Field {
             }
             MessageToField::ActionStarted(Action::NoteScoring(_) | Action::Driving) => {}
             MessageToField::ActionStarted(Action::Climbing) => {
-                if print {
-                    cprintln!(
-                        "<magenta>{} Robot {} Started climbing</>",
-                        self.t,
-                        robot_name
-                    );
-                }
+                cprintln_if_print!(
+                    "<magenta>{} Robot {} Started climbing</>",
+                    self.t,
+                    robot_name
+                );
             }
             MessageToField::NoteFailed(scoring_type) => {
-                if print {
-                    cprintln!(
-                        "<red>{} Robot {} *failed* placing: {:?}</>",
-                        self.t,
-                        robot_name,
-                        scoring_type,
-                    );
-                }
+                cprintln_if_print!(
+                    "<red>{} Robot {} *failed* placing: {:?}</>",
+                    self.t,
+                    robot_name,
+                    scoring_type
+                );
             }
             MessageToField::FinishedClimbing(EndgameState::FailedTrapping) => {
                 self.climbs += 1;
-                if print {
-                    cprintln!(
-                        "<bright-cyan>{} Robot {} Succeeded Climbing</>",
-                        self.t,
-                        robot_name
-                    );
-                }
+                cprintln_if_print!(
+                    "<bright-cyan>{} Robot {} Succeeded Climbing</>",
+                    self.t,
+                    robot_name
+                );
             }
             MessageToField::FinishedClimbing(EndgameState::FailedClimbing) => {
-                if print {
-                    cprintln!(
-                        "<bright-red>{} Robot {} *failed* climbing</>",
-                        self.t,
-                        robot_name
-                    );
-                }
+                cprintln_if_print!(
+                    "<bright-red>{} Robot {} *failed* climbing</>",
+                    self.t,
+                    robot_name
+                );
             }
             MessageToField::FinishedClimbing(EndgameState::Trapped) => {
                 self.traps += 1;
                 self.climbs += 1;
-                if print {
-                    cprintln!(
-                        "<bright-green>{} Robot {} Added to trap</>",
-                        self.t,
-                        robot_name
-                    );
-                }
+                cprintln_if_print!(
+                    "<bright-green>{} Robot {} Added to trap</>",
+                    self.t,
+                    robot_name
+                );
             }
         }
     }
 
-    pub fn apply(mut self, actions: AllianceActions, print: bool) -> Self {
+    pub fn apply(mut self, actions: AllianceActions) -> Self {
         self.t = actions.t;
         if let Some(ref mut time_left_for_amplified) = self.time_left_for_amplified {
             *time_left_for_amplified -= STEP;
             if *time_left_for_amplified <= 0.0 {
-                if print {
-                    cprintln!("<yellow>{} *** Stop amplification ***</>", self.t,);
-                }
+                cprintln_if_print!("<yellow>{} *** Stop amplification ***</>", self.t);
                 self.time_left_for_amplified = None;
                 self.current_amplify = AmplifyState::Off;
             }
@@ -199,10 +179,11 @@ impl Field {
 
         if !self.started_teleop && self.t >= 15.0 {
             self.started_teleop = true;
-            println!("Started Teleop")
+
+            cprintln_if_print!("Started Teleop",)
         }
         for action in actions.actions.into_iter().flatten() {
-            self.apply_action(action, print);
+            self.apply_action(action);
         }
         self
     }
